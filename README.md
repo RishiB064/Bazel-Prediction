@@ -17,7 +17,7 @@ The following instructions detail how to set up the project environment.
 
 1. Clone this repository to your local machine:
    ```powershell
-   git clone [https://github.com/yourusername/Bazel-Build-Times.git](https://github.com/yourusername/Bazel-Build-Times.git)
+   git clone [https://github.com/RishiB064/Bazel-Build-Times.git](https://github.com/RishiB064/Bazel-Build-Times.git)
    cd Bazel-Build-Times
    ```
 
