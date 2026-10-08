@@ -1,6 +1,6 @@
 # Predicting Bazel Build Times
 
-**Author:** Rishi Bharadwaj Ramesh
+**Authors:** Rishi Bharadwaj Ramesh Raghav Budur
 
 ## Overview
 The project implements a machine learning model to predict the CPU-time of Bazel builds. It utilizes a linear regression algorithm with feature crossing to capture non-linear relationships between the inputs (the most common file path prefix and file type in a commit) and the build execution time. This predictive model allows developers to optimize resource usage in advance of executing a build.
