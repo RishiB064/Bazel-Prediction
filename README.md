@@ -10,7 +10,6 @@ The project implements a machine learning model to predict the CPU-time of Bazel
 Ensure the following tools are installed and configured in your Windows environment:
 * Python 3.8 or higher
 * Git
-* Bazel (added to your Windows PATH)
 * Windows PowerShell
 
 ## Setup Instructions
