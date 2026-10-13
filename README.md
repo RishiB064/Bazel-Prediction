@@ -1,34 +1,32 @@
 # Bazel Build Time Predictor
 
-#### AUTHOR : RISHI BHARADWAJ
-
 An end-to-end machine learning pipeline that forecasts compilation CPU execution time (`cpu_time` in milliseconds) for incoming commits in the `bazelbuild/bazel` repository prior to build execution.
 
-This implementation modernizes the legacy Stanford CS229 baseline (deprecated `tf.estimator` additive linear regression) into a multimodal Keras Functional neural network and tree-based ensemble (`HistGradientBoosting`), integrating continuous Git churn telemetry to overcome categorical informational bottlenecks.
+This implementation modernizes the legacy Stanford CS229 baseline (deprecated `tf.estimator.LinearRegression`) into a multimodal Keras Functional neural network and tree-based ensemble (`HistGradientBoosting`), integrating continuous Git churn telemetry to overcome categorical informational bottlenecks.
 
 ---
 
 ## Architecture Overview
 
-The system ingests commit metadata and diff telemetry through two parallel preprocessing streams directly within the model computational graph:
+The system ingests commit metadata and diff telemetry through two parallel preprocessing streams directly within the model graph:
 
-```
-[ Categorical Inputs: prefix, type ]       [ Continuous Inputs: 9 Churn Metrics ]
-                 │                                           │
-        StringLookup Layers                        log1p + Normalization
-                 │                                           │
-    HashedCrossing(64) + One-Hot                             │
-                 │                                           │
-       Sparse Vector (64-D)                         Dense Vector (9-D)
-                 └─────────────────────┬─────────────────────┘
-                                       │
-                           Concatenate Layer (73-D)
-                                       │
-                           Dense(32, activation='relu')
-                                       │
-                           Dense(16, activation='relu')
-                                       │
-                           Dense(1) [Median-Scaled]
+```text
+[ Categorical Inputs: prefix, type ]        [ Continuous Inputs: 9 Churn Metrics ]
+               │                                          │
+      StringLookup Layers                       log1p + Normalization
+               │                                          │
+  HashedCrossing(64) + One-Hot                            │
+               │                                          │
+     Sparse Vector (64-D)                        Dense Vector (9-D)
+               └──────────────────┬───────────────────────┘
+                                  │
+                      Concatenate Layer (73-D)
+                                  │
+                    Dense(32, activation='relu')
+                                  │
+                    Dense(16, activation='relu')
+                                  │
+                      Dense(1) [Median-Scaled]
 ```
 
 * **Categorical Stream:** Encodes directory path (`prefix`) and file type (`type`) strings via `StringLookup`, then projects their interaction into 64 bounded buckets via `tf.keras.layers.HashedCrossing(num_bins=64)` and `CategoryEncoding`. This captures directory-language conjunctions without memory bloat or vocabulary explosion.
@@ -39,13 +37,15 @@ The system ingests commit metadata and diff telemetry through two parallel prepr
 
 ## Features
 
-The model processes 11 total commit features:
+The model processes 11 total commit features.
 
-### Categorical Features
+### Categorical
+
 * `prefix`: Primary directory modified (e.g., `src/`, `third_party/`, `tools/`).
 * `type`: Primary programming language or file type (e.g., `JAVA`, `C/C++`, `PYTHON`, `SH`).
 
 ### Continuous Churn Telemetry
+
 * `num_files`: Total unique files touched in the commit.
 * `insertions`: Total lines added.
 * `deletions`: Total lines removed.
@@ -60,7 +60,7 @@ The model processes 11 total commit features:
 
 ## Evaluation & Benchmarks
 
-Models were evaluated on an identical split (300 train / 100 validation / 100 test). The target variable exhibits extreme variance (600 ms to 45,000+ ms).
+Models were evaluated on an identical split (300 train / 100 validation / 100 test) using a fixed seed (`random_state=42`). The target variable exhibits high variance (600 ms to 45,000+ ms).
 
 | Model | Architecture | Features Used | Test RMSE | $\Delta$ vs Baseline |
 | :--- | :--- | :--- | :--- | :--- |
@@ -71,7 +71,8 @@ Models were evaluated on an identical split (300 train / 100 validation / 100 te
 | **HistGradientBoosting** | Histogram-Based GBDT (`sklearn`) | All (11 features) | **6,587.46 ms** | **-126.33 ms** |
 
 ### Key Findings
-1. **Breaking the Categorical Limit:** Using only categorical labels bounds achievable test performance at **6,591.02 ms** (the Categorical Floor). Both `HistGradientBoosting` (6,587.46 ms) and the Keras Hybrid NN (6,598.51 ms) outperform the naive mean (6,618 ms) and approach/surpass this theoretical boundary, proving that continuous Git churn metrics provide real predictive signal.
+
+1. **Breaking the Categorical Limit:** Using only categorical labels bounds achievable test performance at **6,591.02 ms** (the Categorical Floor). `HistGradientBoosting` (6,587.46 ms) surpasses this boundary, while the Keras Hybrid NN (6,598.51 ms) outperforms the naive mean (6,618 ms) and approaches it, suggesting that continuous Git churn metrics provide real predictive signal.
 2. **Early Stopping Protection:** The training loop utilizes `EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)`. Training halted at **Epoch 11**, restoring optimal generalization weights from Epoch 1 (`val_loss: 10.6639`) before the network could overfit the 300-sample training partition.
 
 ---
@@ -79,20 +80,14 @@ Models were evaluated on an identical split (300 train / 100 validation / 100 te
 ## Project Structure
 
 ```text
-├── data/
-│   ├── InputData.csv          # Commit metadata (prefix, type)
-│   ├── CPUTimes.csv           # Ground-truth Bazel build execution times (ms)
-│   └── build_metrics.csv      # Merged dataset with 9 Git churn metrics
-├── scripts/
-│   ├── data_collection.py     # Automated Git telemetry extraction (git diff --numstat)
-│   ├── train_hybrid.py        # Keras Hybrid model definition and training loop
-│   ├── train_baseline.py      # Replicated linear baseline evaluation
-│   └── benchmark_gbdt.py      # HistGradientBoosting benchmark pipeline
-├── dashboard/
-│   ├── app.py                 # Streamlit evaluation and visualization dashboard
-│   └── requirements.txt       # Dashboard-specific dependencies
-├── README.md
-└── requirements.txt
+├── bazel_repo/            # Local clone of the bazelbuild/bazel repository
+├── CPUTimes.csv           # Ground-truth Bazel build execution times (ms)
+├── InputData.csv          # Commit metadata (prefix, type)
+├── build_metrics.csv      # Unified dataset with Git churn metrics
+├── data_collection.py     # Git diff telemetry extraction (git diff --numstat)
+├── merge_data.py          # Aligns InputData.csv and CPUTimes.csv into build_metrics.csv
+├── predict_build_time.py  # Model definitions (Legacy, Hybrid NN, HistGBDT) & evaluation loop
+└── README.md
 ```
 
 ---
@@ -100,10 +95,12 @@ Models were evaluated on an identical split (300 train / 100 validation / 100 te
 ## Installation & Setup
 
 ### Prerequisites
+
 * Python 3.9+
-* Git (must be installed and accessible in system `PATH` for telemetry collection)
+* Git (must be installed and available in system PATH for telemetry collection)
 
 ### Environment Setup
+
 ```bash
 git clone https://github.com/RishiB064/bazel-build-predictor.git
 cd bazel-build-predictor
@@ -111,34 +108,35 @@ cd bazel-build-predictor
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install tensorflow pandas scikit-learn numpy
 ```
 
 ---
 
 ## Reproduction & Usage
 
-### 1. Extract Git Telemetry
-Run `data_collection.py` against a local clone of `bazelbuild/bazel` to compute churn metrics and output `build_metrics.csv`:
+Execute the pipeline in the following sequence from the repository root.
+
+### 1. Extract Git Churn Telemetry
+
+Run `data_collection.py` against the local `bazel_repo/` clone to extract `--numstat` churn features:
+
 ```bash
-python scripts/data_collection.py --repo-path /path/to/bazel --output data/build_metrics.csv
+python data_collection.py
 ```
 
-### 2. Train the Keras Hybrid Model
-Train the multimodal neural network with feature crossing and median scaling:
+### 2. Merge Features and Targets
+
+Align commit metadata (`InputData.csv`) with the ground-truth compilation times (`CPUTimes.csv`) to produce `build_metrics.csv`:
+
 ```bash
-python scripts/train_hybrid.py \
-  --data data/build_metrics.csv \
-  --epochs 200 \
-  --batch-size 16 \
-  --lr 0.01 \
-  --patience 10
+python merge_data.py
 ```
 
-### 3. Run Benchmark Models
-Evaluate the legacy linear baseline and the HistGradientBoosting regressor:
-```bash
-python scripts/train_baseline.py --data data/build_metrics.csv
-python scripts/benchmark_gbdt.py --data data/build_metrics.csv
-```
+### 3. Train and Evaluate Models
 
+Execute `predict_build_time.py` to train the Keras Hybrid Neural Network, compute the Categorical Floor, run the HistGradientBoosting regressor, and print the evaluation summary:
+
+```bash
+python predict_build_time.py
+```
