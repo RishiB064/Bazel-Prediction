@@ -105,7 +105,7 @@ Models were evaluated on an identical split (300 train / 100 validation / 100 te
 
 ### Environment Setup
 ```bash
-git clone https://github.com/your-username/bazel-build-predictor.git
+git clone https://github.com/RishiB064/bazel-build-predictor.git
 cd bazel-build-predictor
 
 python3 -m venv venv
@@ -142,8 +142,3 @@ python scripts/train_baseline.py --data data/build_metrics.csv
 python scripts/benchmark_gbdt.py --data data/build_metrics.csv
 ```
 
-### 4. Launch the Interactive Dashboard
-Launch the evaluation UI to visualize model predictions against ground truth:
-```bash
-streamlit run dashboard/app.py
-```
